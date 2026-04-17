@@ -197,7 +197,7 @@ const MarketplaceScreen: React.FC = () => {
   useEffect(() => {
     loadMarketplaceData();
     loadMandiPrices();
-  }, [loadMandiPrices]);
+  }, [loadMarketplaceData, loadMandiPrices]);
 
   useEffect(() => {
     if (activeTab === 'browse') {

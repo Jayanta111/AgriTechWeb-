@@ -49,6 +49,7 @@ interface NearbyStore {
 }
 
 function ScanScreen() {
+  console.log('ScanScreen component mounting...');
   const [mode, setMode] = useState<'camera' | 'upload'>('camera');
   const [detectedCrop, setDetectedCrop] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -56,6 +57,7 @@ function ScanScreen() {
   const [error, setError] = useState('');
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraRetries, setCameraRetries] = useState(0);
   const [precautions, setPrecautions] = useState<any>(null);
   const [showPrecautions, setShowPrecautions] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -70,52 +72,238 @@ function ScanScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const startCamera = async () => {
+  const startCamera = async (retryCount = 0) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+      // Clear any previous errors
+      setError('');
+      
+      // Check if browser supports mediaDevices
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera API not supported in this browser');
+      }
+
+      // Stop any existing stream first
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+
+      // Try to get camera stream with fallback options
+      let stream: MediaStream;
+      try {
+        // Try rear camera first
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+      } catch (rearCameraError) {
+        console.warn('Rear camera not available, trying front camera:', rearCameraError);
+        // Fallback to front camera
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+      }
+
+      // Validate stream has video tracks
+      const videoTracks = stream.getVideoTracks();
+      console.log('Stream video tracks:', videoTracks.length);
+      
+      if (videoTracks.length === 0) {
+        throw new Error('No video tracks found in stream');
+      }
+      
+      // Check track state
+      videoTracks.forEach((track, index) => {
+        console.log(`Track ${index}:`, {
+          enabled: track.enabled,
+          muted: track.muted,
+          readyState: track.readyState,
+          label: track.label
+        });
       });
 
       setCameraStream(stream);
+      setCameraRetries(0); // Reset retry count on success
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => setCameraReady(true);
+        const video = videoRef.current;
+        
+        // Reset video element
+        video.srcObject = null;
+        video.load();
+        
+        // Set the stream
+        video.srcObject = stream;
+        
+        console.log('Video stream set, waiting for metadata...');
+        
+        // Simple approach - try to play immediately
+        const attemptPlay = () => {
+          video.play().then(() => {
+            console.log('Video playback started successfully');
+            setCameraReady(true);
+          }).catch(error => {
+            console.log('Initial play failed, will retry:', error);
+            
+            // Retry after a short delay
+            setTimeout(() => {
+              video.play().then(() => {
+                console.log('Retry playback successful');
+                setCameraReady(true);
+              }).catch(retryError => {
+                console.error('Retry playback failed:', retryError);
+                
+                // Final attempt with metadata event
+                video.onloadedmetadata = () => {
+                  console.log('Metadata loaded, final play attempt');
+                  video.play().then(() => {
+                    console.log('Final play attempt successful');
+                    setCameraReady(true);
+                  }).catch(finalError => {
+                    console.error('Final play attempt failed:', finalError);
+                    setError('Camera initialization failed. Please try again or use upload mode.');
+                    setMode('upload');
+                  });
+                };
+              });
+            }, 500);
+          });
+        };
+        
+        // Start the play attempt process
+        setTimeout(attemptPlay, 100);
+        
+        // Handle video errors
+        video.onerror = (event) => {
+          console.error('Video loading error:', event);
+          setError('Video loading error');
+          setMode('upload');
+        };
+        
+        // Also check if video element itself loads
+        video.onloadeddata = () => {
+          console.log('Video data loaded');
+        };
       }
-    } catch {
-      setError('Camera access denied');
+    } catch (error: any) {
+      console.error('Camera initialization error:', error);
+      let errorMessage = 'Camera access failed';
+      
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        errorMessage = 'Camera permission denied. Please allow camera access and try again.';
+      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        errorMessage = 'No camera device found. Please check your camera connection.';
+      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+        errorMessage = 'Camera is already in use by another application.';
+      } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
+        errorMessage = 'Camera does not support the required settings.';
+      } else if (error.message === 'Camera API not supported in this browser') {
+        errorMessage = 'Camera not supported in this browser. Please try a modern browser.';
+      }
+      
+      // Retry logic for temporary failures
+      if (retryCount < 2 && (error.name === 'NotReadableError' || error.name === 'TrackStartError')) {
+        setCameraRetries(retryCount + 1);
+        setError(`Camera busy, retrying... (${retryCount + 1}/3)`);
+        setTimeout(() => startCamera(retryCount + 1), 1000);
+        return;
+      }
+      
+      setError(errorMessage);
       setMode('upload');
     }
   };
 
   const stopCamera = useCallback(() => {
-    cameraStream?.getTracks().forEach(track => track.stop());
-    setCameraStream(null);
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => {
+        track.stop();
+        track.enabled = false;
+      });
+      setCameraStream(null);
+    }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    
     setCameraReady(false);
   }, [cameraStream]);
 
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    
+    console.log('Mode changed to:', mode);
+    
     if (mode === 'camera') {
+      console.log('Starting camera...');
       startCamera();
-      return stopCamera;
+      cleanup = stopCamera;
     } else {
+      console.log('Stopping camera...');
       stopCamera();
     }
+    
+    return () => {
+      if (cleanup) {
+        console.log('Cleaning up camera...');
+        cleanup();
+      }
+    };
   }, [mode, stopCamera]);
 
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => {
+          track.stop();
+          track.enabled = false;
+        });
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [cameraStream]);
+
   const scanCrop = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) {
+      setError('Camera not ready');
+      return;
+    }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
-    if (!ctx) return;
+    if (!ctx) {
+      setError('Canvas initialization failed');
+      return;
+    }
+
+    // Check if video is ready and has valid dimensions
+    if (!cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
+      setError('Camera not ready. Please wait for initialization.');
+      return;
+    }
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    ctx.drawImage(video, 0, 0);
+    try {
+      ctx.drawImage(video, 0, 0);
+    } catch (drawError) {
+      console.error('Failed to draw video to canvas:', drawError);
+      setError('Failed to capture image from camera');
+      return;
+    }
 
     setIsScanning(true);
 
@@ -437,6 +625,8 @@ function ScanScreen() {
               <video 
                 ref={videoRef} 
                 autoPlay 
+                muted 
+                playsInline
                 className="w-full h-64 sm:h-96 object-cover bg-black"
               />
               <canvas ref={canvasRef} className="hidden" />
@@ -445,7 +635,32 @@ function ScanScreen() {
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
-                    <p className="text-white">Initializing camera...</p>
+                    <p className="text-white mb-2">
+                      {cameraRetries > 0 
+                        ? `Retrying camera initialization... (${cameraRetries}/3)` 
+                        : 'Initializing camera...'
+                      }
+                    </p>
+                    <div className="flex gap-2 justify-center">
+                      {cameraRetries > 0 && (
+                        <button
+                          onClick={() => startCamera(0)}
+                          className="bg-white text-gray-800 px-4 py-2 rounded-lg text-sm hover:bg-gray-100 transition-colors"
+                        >
+                          Cancel Retry
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          console.log('Manual camera refresh triggered');
+                          stopCamera();
+                          setTimeout(() => startCamera(0), 100);
+                        }}
+                        className="bg-green-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-600 transition-colors"
+                      >
+                        Refresh Camera
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -497,7 +712,7 @@ function ScanScreen() {
                   <h3 className="text-lg font-semibold mb-3">Selected Image:</h3>
                   <img 
                     src={preview} 
-                    alt="Selected crop image for analysis" 
+                    alt="Selected crop for analysis" 
                     className="w-full rounded-lg shadow-md max-h-64 object-contain"
                   />
                 </div>
@@ -509,7 +724,17 @@ function ScanScreen() {
         {/* Error Display */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-            {error}
+            <div className="flex items-center justify-between">
+              <span>{error}</span>
+              {mode === 'camera' && (
+                <button
+                  onClick={() => startCamera(0)}
+                  className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors"
+                >
+                  Retry Camera
+                </button>
+              )}
+            </div>
           </div>
         )}
 
