@@ -38,14 +38,14 @@ const HomeScreen = () => {
                 ) : (
                   <div className="flex space-x-2">
                     <Link
-                      to="/sign-in"
+                      to="/sign-in?redirect=/market"
                       className="bg-green-500 text-white px-3 py-2 rounded-lg flex items-center space-x-1 hover:bg-green-600 transition-colors text-sm"
                     >
                       <LogIn className="w-4 h-4" />
                       <span className="hidden sm:inline">Sign In</span>
                     </Link>
                     <Link
-                      to="/sign-up"
+                      to="/sign-up?redirect=/market"
                       className="bg-blue-500 text-white px-3 py-2 rounded-lg flex items-center space-x-1 hover:bg-blue-600 transition-colors text-sm"
                     >
                       <UserPlus className="w-4 h-4" />

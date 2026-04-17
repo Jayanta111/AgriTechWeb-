@@ -134,50 +134,60 @@ function ScanScreen() {
       if (videoRef.current) {
         const video = videoRef.current;
         
-        // Reset video element
-        video.srcObject = null;
-        video.load();
-        
-        // Set the stream
+        // Set the stream without calling load() to prevent interrupting play requests
         video.srcObject = stream;
         
         console.log('Video stream set, waiting for metadata...');
         
-        // Simple approach - try to play immediately
-        const attemptPlay = () => {
+        // Track if play attempts are in progress to prevent simultaneous attempts
+        let playAttemptsInProgress = 0;
+        let maxPlayAttemptsReached = false;
+        
+        const attemptPlay = (attemptNumber = 1) => {
+          if (maxPlayAttemptsReached || playAttemptsInProgress > 0) {
+            return;
+          }
+          
+          playAttemptsInProgress++;
+          
           video.play().then(() => {
             console.log('Video playback started successfully');
             setCameraReady(true);
+            playAttemptsInProgress = 0;
           }).catch(error => {
-            console.log('Initial play failed, will retry:', error);
+            console.log(`Play attempt ${attemptNumber} failed:`, error);
+            playAttemptsInProgress--;
             
-            // Retry after a short delay
-            setTimeout(() => {
-              video.play().then(() => {
-                console.log('Retry playback successful');
-                setCameraReady(true);
-              }).catch(retryError => {
-                console.error('Retry playback failed:', retryError);
-                
-                // Final attempt with metadata event
-                video.onloadedmetadata = () => {
-                  console.log('Metadata loaded, final play attempt');
-                  video.play().then(() => {
-                    console.log('Final play attempt successful');
-                    setCameraReady(true);
-                  }).catch(finalError => {
-                    console.error('Final play attempt failed:', finalError);
-                    setError('Camera initialization failed. Please try again or use upload mode.');
-                    setMode('upload');
-                  });
-                };
-              });
-            }, 500);
+            if (error.name === 'AbortError') {
+              console.log('Play request was aborted, this is expected during stream changes');
+              return;
+            }
+            
+            // Retry logic for other errors
+            if (attemptNumber < 3) {
+              setTimeout(() => attemptPlay(attemptNumber + 1), 500 * attemptNumber);
+            } else {
+              maxPlayAttemptsReached = true;
+              console.error('All play attempts failed');
+              setError('Camera initialization failed. Please try again or use upload mode.');
+              setMode('upload');
+            }
           });
         };
         
-        // Start the play attempt process
-        setTimeout(attemptPlay, 100);
+        // Set up metadata handler first
+        video.onloadedmetadata = () => {
+          console.log('Video metadata loaded, attempting playback');
+          attemptPlay(1);
+        };
+        
+        // Fallback: try to play after a short delay if metadata doesn't load
+        setTimeout(() => {
+          if (!cameraReady && playAttemptsInProgress === 0) {
+            console.log('Metadata not loaded, trying direct play attempt');
+            attemptPlay(1);
+          }
+        }, 500);
         
         // Handle video errors
         video.onerror = (event) => {

@@ -55,6 +55,17 @@ function App() {
           <Route path="/sign-in" element={<SignInPage />} />
           <Route path="/sign-up" element={<SignUpPage />} />
           
+          {/* Marketplace Route */}
+          <Route path="/market" element={
+            <div className="min-h-screen bg-gray-50 flex flex-col">
+              <div className="flex-1 pb-20">
+                <MarketplaceScreen />
+              </div>
+              <BottomNavBar active="Market" onPress={setActiveTab} />
+              <PWAInstallPrompt />
+            </div>
+          } />
+          
           {/* Main App */}
           <Route path="/*" element={
             <div className="min-h-screen bg-gray-50 flex flex-col">

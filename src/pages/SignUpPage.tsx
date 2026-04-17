@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { SignUp } from '@clerk/clerk-react';
 import { 
   ArrowLeft, 
@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 
 const SignUpPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/market';
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4">
       {/* Background Elements */}
@@ -78,9 +80,9 @@ const SignUpPage: React.FC = () => {
             <SignUp 
               path="/sign-up"
               routing="path"
-              afterSignUpUrl="/"
-              redirectUrl="/"
-              forceRedirectUrl="/"
+              afterSignUpUrl={redirectTo}
+              redirectUrl={redirectTo}
+              forceRedirectUrl={redirectTo}
             />
           </div>
 

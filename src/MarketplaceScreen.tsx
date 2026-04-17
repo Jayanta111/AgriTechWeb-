@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Plus, Search, Heart, Eye, Package, User, MapPin, Calendar, TrendingUp, RefreshCw, AlertCircle, TrendingDown, Minus, Lock, LogIn, UserPlus } from 'lucide-react';
 import marketplaceService, { Listing, Transaction, MarketplaceStats } from './services/marketplaceService.tsx';
 import marketPriceService from './services/marketPriceService.tsx';
@@ -7,6 +7,8 @@ import CreateListingModal from './components/CreateListingModal.tsx';
 import { useAuthContext } from './contexts/AuthContext.tsx';
 
 const MarketplaceScreen: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [listings, setListings] = useState<Listing[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stats, setStats] = useState<MarketplaceStats | null>(null);
@@ -101,8 +103,8 @@ const MarketplaceScreen: React.FC = () => {
 
   const handleCreateListing = async (listingData: any) => {
     if (!isAuthenticated || !currentUser) {
-      // Redirect to sign-in page instead of showing modal
-      window.location.href = '/sign-in';
+      // Redirect to sign-in page with createListing parameter
+      navigate('/sign-in?redirect=/market&createListing=true');
       return;
     }
 
@@ -121,8 +123,8 @@ const MarketplaceScreen: React.FC = () => {
 
   const handleBuy = async (listingId: string, quantity: number) => {
     if (!isAuthenticated || !currentUser) {
-      // Redirect to sign-in page instead of showing modal
-      window.location.href = '/sign-in';
+      // Redirect to sign-in page with redirect back to marketplace
+      navigate('/sign-in?redirect=/market');
       return;
     }
 
@@ -197,7 +199,15 @@ const MarketplaceScreen: React.FC = () => {
   useEffect(() => {
     loadMarketplaceData();
     loadMandiPrices();
-  }, [loadMarketplaceData, loadMandiPrices]);
+    
+    // Check if user should be redirected to create listing after login
+    const createListingParam = searchParams.get('createListing');
+    if (createListingParam === 'true' && isAuthenticated) {
+      setShowCreateListing(true);
+      // Clean up the URL parameter
+      navigate('/market', { replace: true });
+    }
+  }, [loadMarketplaceData, loadMandiPrices, searchParams, isAuthenticated, navigate]);
 
   useEffect(() => {
     if (activeTab === 'browse') {
@@ -237,14 +247,14 @@ const MarketplaceScreen: React.FC = () => {
           {!isAuthenticated ? (
             <div className="flex space-x-2">
               <Link
-                to="/sign-in"
+                to="/sign-in?redirect=/market"
                 className="bg-green-500 text-white px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-600 transition-colors"
               >
                 <LogIn className="w-4 h-4" />
                 <span className="text-sm">Sign In</span>
               </Link>
               <Link
-                to="/sign-up"
+                to="/sign-up?redirect=/market"
                 className="bg-blue-500 text-white px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-600 transition-colors"
               >
                 <UserPlus className="w-4 h-4" />
@@ -498,12 +508,12 @@ const MarketplaceScreen: React.FC = () => {
                       </button>
                       {!isAuthenticated ? (
                         <Link
-                          to="/sign-in"
-                          className="px-2 py-1 bg-blue-500 text-white text-xs sm:text-sm rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-1"
-                        >
-                          <Lock className="w-3 h-3" />
-                          <span>Sign In</span>
-                        </Link>
+                        to="/sign-in?redirect=/market"
+                        className="px-2 py-1 bg-blue-500 text-white text-xs sm:text-sm rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-1"
+                      >
+                        <Lock className="w-3 h-3" />
+                        <span>Sign In</span>
+                      </Link>
                       ) : (
                         <button
                           onClick={() => handleBuy(listing.listing_id, 1)}
