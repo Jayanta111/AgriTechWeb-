@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA Test - AgriTech</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4CAF50">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>AgriTech PWA Test Page</h1>
+    
+    <div class="card">
+        <h2>PWA Status Check</h2>
+        <div id="status"></div>
+        <button onclick="checkPWAStatus()">Check Status</button>
+    </div>
+
+    <div class="card">
+        <h2>Installation Test</h2>
+        <div id="install-status"></div>
+        <button id="install-btn" onclick="installPWA()">Install App</button>
+        <button onclick="testManualInstall()">Test Manual Install</button>
+    </div>
+
+    <div class="card">
+        <h2>Service Worker Status</h2>
+        <div id="sw-status"></div>
+        <button onclick="checkServiceWorker()">Check SW</button>
+        <button onclick="registerServiceWorker()">Register SW</button>
+    </div>
+
+    <div class="card">
+        <h2>Manifest Check</h2>
+        <div id="manifest-status"></div>
+        <button onclick="checkManifest()">Check Manifest</button>
+    </div>
+
+    <script>
+        let deferredPrompt = null;
+
+        // Listen for install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            updateInstallStatus('Install prompt available!', 'success');
+            document.getElementById('install-btn').disabled = false;
+        });
+
+        // Listen for app installed
+        window.addEventListener('appinstalled', () => {
+            updateInstallStatus('App installed successfully!', 'success');
+            deferredPrompt = null;
+        });
+
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function updateInstallStatus(message, type = 'info') {
+            const status = document.getElementById('install-status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function updateSWStatus(message, type = 'info') {
+            const status = document.getElementById('sw-status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function updateManifestStatus(message, type = 'info') {
+            const status = document.getElementById('manifest-status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function checkPWAStatus() {
+            const checks = [];
+            
+            // Check service worker
+            if ('serviceWorker' in navigator) {
+                checks.push('Service Worker: Supported');
+            } else {
+                checks.push('Service Worker: Not Supported');
+            }
+
+            // Check install prompt
+            if ('beforeinstallprompt' in window) {
+                checks.push('Install Prompt: Supported');
+            } else {
+                checks.push('Install Prompt: Not Supported');
+            }
+
+            // Check display mode
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+            const isInWebAppiOS = navigator.standalone === true;
+            
+            if (isStandalone || isInWebAppiOS) {
+                checks.push('App Mode: Installed');
+            } else {
+                checks.push('App Mode: Not Installed');
+            }
+
+            // Check HTTPS
+            const isHTTPS = location.protocol === 'https:' || location.hostname === 'localhost';
+            checks.push(`HTTPS: ${isHTTPS ? 'Yes' : 'No (Required for PWA)'}`);
+
+            updateStatus(checks.join('<br>'), 'info');
+        }
+
+        function installPWA() {
+            if (!deferredPrompt) {
+                updateInstallStatus('No install prompt available', 'error');
+                return;
+            }
+
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    updateInstallStatus('User accepted install', 'success');
+                } else {
+                    updateInstallStatus('User dismissed install', 'info');
+                }
+                deferredPrompt = null;
+            });
+        }
+
+        function testManualInstall() {
+            const userAgent = navigator.userAgent.toLowerCase();
+            let instructions = '';
+
+            if (userAgent.includes('chrome')) {
+                instructions = 'Chrome: Click three dots > "Add to Home screen" or "Install app"';
+            } else if (userAgent.includes('firefox')) {
+                instructions = 'Firefox: Click three dots > "Install Page"';
+            } else if (userAgent.includes('safari')) {
+                instructions = 'Safari: Click Share button > "Add to Home Screen"';
+            } else {
+                instructions = 'Look for "Install" or "Add to Home screen" in browser menu';
+            }
+
+            updateInstallStatus(instructions, 'info');
+        }
+
+        function checkServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    if (registrations.length > 0) {
+                        updateSWStatus(`Service Worker Active: ${registrations.length} registered`, 'success');
+                        registrations.forEach(reg => {
+                            console.log('SW Registration:', reg);
+                        });
+                    } else {
+                        updateSWStatus('No Service Workers registered', 'error');
+                    }
+                });
+            } else {
+                updateSWStatus('Service Worker not supported', 'error');
+            }
+        }
+
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    updateSWStatus('Service Worker registered successfully', 'success');
+                    console.log('SW Registration:', registration);
+                }).catch(error => {
+                    updateSWStatus(`SW registration failed: ${error}`, 'error');
+                });
+            } else {
+                updateSWStatus('Service Worker not supported', 'error');
+            }
+        }
+
+        function checkManifest() {
+            fetch('/manifest.json')
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    }
+                    throw new Error('Manifest not found');
+                })
+                .then(manifest => {
+                    let checks = [];
+                    checks.push(`Name: ${manifest.name}`);
+                    checks.push(`Short Name: ${manifest.short_name}`);
+                    checks.push(`Display: ${manifest.display}`);
+                    checks.push(`Icons: ${manifest.icons ? manifest.icons.length : 0} found`);
+                    
+                    // Check if icons exist
+                    if (manifest.icons) {
+                        const icon192 = manifest.icons.find(icon => icon.sizes === '192x192');
+                        const icon512 = manifest.icons.find(icon => icon.sizes === '512x512');
+                        
+                        if (icon192) checks.push('192x192 icon: Found');
+                        if (icon512) checks.push('512x512 icon: Found');
+                    }
+
+                    updateManifestStatus(checks.join('<br>'), 'success');
+                })
+                .catch(error => {
+                    updateManifestStatus(`Manifest error: ${error}`, 'error');
+                });
+        }
+
+        // Auto-check on load
+        window.addEventListener('load', () => {
+            checkPWAStatus();
+            checkServiceWorker();
+            checkManifest();
+        });
+    </script>
+</body>
+</html>
