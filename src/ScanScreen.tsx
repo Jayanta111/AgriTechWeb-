@@ -38,15 +38,6 @@ function ScanScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (mode === 'camera') {
-      startCamera();
-      return stopCamera;
-    } else {
-      stopCamera();
-    }
-  }, [mode]);
-
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -70,6 +61,15 @@ function ScanScreen() {
     setCameraStream(null);
     setCameraReady(false);
   };
+
+  useEffect(() => {
+    if (mode === 'camera') {
+      startCamera();
+      return stopCamera;
+    } else {
+      stopCamera();
+    }
+  }, [mode]);
 
   const scanCrop = async () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -248,7 +248,7 @@ function ScanScreen() {
             Choose Image
           </button>
 
-          {preview && <img src={preview} className="mt-3 rounded" />}
+          {preview && <img src={preview} alt="Preview of selected image" className="mt-3 rounded" />}
 
           {error && <p className="text-red-500">{error}</p>}
 

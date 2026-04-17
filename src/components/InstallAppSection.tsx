@@ -14,7 +14,6 @@ const InstallAppSection: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [installStatus, setInstallStatus] = useState<'available' | 'installed' | 'unsupported'>('available');
   const [showInstructions, setShowInstructions] = useState(false);
 
   useEffect(() => {
@@ -26,8 +25,7 @@ const InstallAppSection: React.FC = () => {
       
       if (isStandalone || isInWebAppiOS || isStandaloneChrome) {
         setIsInstalled(true);
-        setInstallStatus('installed');
-        console.log('App is already installed');
+                console.log('App is already installed');
       } else {
         console.log('App is not installed, checking for install prompt...');
         // Check if we can show install prompt
@@ -47,16 +45,14 @@ const InstallAppSection: React.FC = () => {
       e.preventDefault();
       setDeferredPrompt(e);
       setShowInstallBanner(true);
-      setInstallStatus('available');
-      console.log('Install prompt stored, showing install options');
+            console.log('Install prompt stored, showing install options');
     };
 
     // Listen for appinstalled event
     const handleAppInstalled = () => {
       console.log('appinstalled event fired');
       setIsInstalled(true);
-      setInstallStatus('installed');
-      setShowInstallBanner(false);
+            setShowInstallBanner(false);
       setDeferredPrompt(null);
     };
 
@@ -68,7 +64,7 @@ const InstallAppSection: React.FC = () => {
       
       if (!isSupported) {
         console.log('PWA not fully supported, falling back to manual install');
-        setInstallStatus('available'); // Still show manual install option
+         // Still show manual install option
       } else {
         console.log('PWA is supported');
       }
@@ -84,8 +80,7 @@ const InstallAppSection: React.FC = () => {
     const checkDelay = setTimeout(() => {
       if (!deferredPrompt && !isInstalled) {
         console.log('No install prompt received, enabling manual install');
-        setInstallStatus('available');
-      }
+              }
     }, 3000);
 
     return () => {
@@ -115,8 +110,7 @@ const InstallAppSection: React.FC = () => {
       if (outcome === 'accepted') {
         console.log('Installation accepted');
         setIsInstalled(true);
-        setInstallStatus('installed');
-        setShowInstallBanner(false);
+                setShowInstallBanner(false);
       } else {
         console.log('Installation dismissed');
       }

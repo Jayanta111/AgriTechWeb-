@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { useAuth } from '@clerk/clerk-react';
 
 const API_BASE_URL = 'http://localhost:5001/api';
 
@@ -79,13 +78,9 @@ class MarketplaceService {
   }
 
   private async getAuthToken(): Promise<string | null> {
-    try {
-      // This will be called from a React component context
-      // For now, return null and we'll handle auth in the components
-      return null;
-    } catch (error) {
-      return null;
-    }
+    // This will be called from a React component context
+    // For now, return null and we'll handle auth in the components
+    return null;
   }
 
   // Method to set auth token from component

@@ -9,7 +9,7 @@ import InstallAppSection from './components/InstallAppSection.tsx';
 import { useAuthContext } from './contexts/AuthContext.tsx';
 
 const HomeScreen = () => {
-  const { isAuthenticated, user, signIn, signOut } = useAuthContext();
+  const { isAuthenticated, user } = useAuthContext();
 
   return (
     <div className="flex-1 bg-gray-50">

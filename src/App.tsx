@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomeScreen from './HomeScreen.tsx';
 import ScanScreen from './ScanScreen.tsx';
 import MarketplaceScreen from './MarketplaceScreen.tsx';
-import ShopScreen from './ShopScreen.tsx';
 import WeatherScreen from './WeatherScreen.tsx';
 import SignInPage from './pages/SignInPage.tsx';
 import SignUpPage from './pages/SignUpPage.tsx';

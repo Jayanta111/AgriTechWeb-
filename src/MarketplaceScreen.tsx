@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Filter, Heart, Eye, Package, User, MapPin, Calendar, TrendingUp, RefreshCw, X, Check, AlertCircle, BarChart2, TrendingDown, Minus, Lock, LogIn, UserPlus } from 'lucide-react';
+import { Plus, Search, Heart, Eye, Package, User, MapPin, Calendar, TrendingUp, RefreshCw, AlertCircle, TrendingDown, Minus, Lock, LogIn, UserPlus } from 'lucide-react';
 import marketplaceService, { Listing, Transaction, MarketplaceStats } from './services/marketplaceService.tsx';
 import marketPriceService from './services/marketPriceService.tsx';
 import CreateListingModal from './components/CreateListingModal.tsx';
@@ -25,8 +25,7 @@ const MarketplaceScreen: React.FC = () => {
   // Authentication context
   const { 
     user: currentUser, 
-    isAuthenticated, 
-    isLoading: authLoading
+    isAuthenticated
   } = useAuthContext();
 
   useEffect(() => {
