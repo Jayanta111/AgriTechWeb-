@@ -27,7 +27,7 @@ const Slider = () => {
     }, 3000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [slides.length]);
 
   return (
     <div className="relative h-40 mx-4 overflow-hidden rounded-xl">

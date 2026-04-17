@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, Heart, Eye, Package, User, MapPin, Calendar, TrendingUp, RefreshCw, AlertCircle, TrendingDown, Minus, Lock, LogIn, UserPlus } from 'lucide-react';
 import marketplaceService, { Listing, Transaction, MarketplaceStats } from './services/marketplaceService.tsx';
@@ -28,22 +28,7 @@ const MarketplaceScreen: React.FC = () => {
     isAuthenticated
   } = useAuthContext();
 
-  useEffect(() => {
-    loadMarketplaceData();
-    loadMandiPrices();
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'browse') {
-      loadListings();
-    } else if (activeTab === 'transactions') {
-      loadTransactions();
-    } else if (activeTab === 'mandi-prices') {
-      loadMandiPrices();
-    }
-  }, [activeTab]);
-
-  const loadMarketplaceData = async () => {
+  const loadMarketplaceData = useCallback(async () => {
     try {
       setLoading(true);
       const [listingsData, statsData] = await Promise.all([
@@ -59,9 +44,9 @@ const MarketplaceScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadMandiPrices = async () => {
+  const loadMandiPrices = useCallback(async () => {
     try {
       setLoading(true);
       const prices = await marketPriceService.getMarketPrices(selectedLocation, selectedCommodity);
@@ -73,9 +58,9 @@ const MarketplaceScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedLocation, selectedCommodity]);
 
-  const loadListings = async () => {
+  const loadListings = useCallback(async () => {
     try {
       setLoading(true);
       const filters: any = {};
@@ -93,9 +78,9 @@ const MarketplaceScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCommodity, selectedLocation, priceRange]);
 
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     try {
       setLoading(true);
       if (!currentUser) {
@@ -112,7 +97,7 @@ const MarketplaceScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser]);
 
   const handleCreateListing = async (listingData: any) => {
     if (!isAuthenticated || !currentUser) {
@@ -208,6 +193,21 @@ const MarketplaceScreen: React.FC = () => {
 
     return filtered;
   };
+
+  useEffect(() => {
+    loadMarketplaceData();
+    loadMandiPrices();
+  }, [loadMandiPrices]);
+
+  useEffect(() => {
+    if (activeTab === 'browse') {
+      loadListings();
+    } else if (activeTab === 'transactions') {
+      loadTransactions();
+    } else if (activeTab === 'mandi-prices') {
+      loadMandiPrices();
+    }
+  }, [activeTab, loadListings, loadTransactions, loadMandiPrices]);
 
   if (loading) {
     return (

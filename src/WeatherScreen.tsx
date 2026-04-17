@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Cloud, CloudRain, Sun, Wind, Droplets, AlertTriangle, CheckCircle, Shield, Bug, Calendar, Thermometer, MapPin } from 'lucide-react';
 import weatherService from './services/weatherService.tsx';
 
@@ -26,10 +26,6 @@ const WeatherScreen: React.FC = () => {
   const [detectedLocation, setDetectedLocation] = useState<string>('');
   const [locationLoading, setLocationLoading] = useState(false);
 
-  useEffect(() => {
-    loadWeatherData();
-  }, []);
-
   const getCurrentLocation = async () => {
     setLocationLoading(true);
     try {
@@ -48,7 +44,7 @@ const WeatherScreen: React.FC = () => {
     }
   };
 
-  const loadWeatherData = async (useLocation?: string) => {
+  const loadWeatherData = useCallback(async (useLocation?: string) => {
     try {
       setLoading(true);
       const weatherData = await weatherService.getCurrentWeather(useLocation || location);
@@ -63,7 +59,11 @@ const WeatherScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [location]);
+
+  useEffect(() => {
+    loadWeatherData();
+  }, [loadWeatherData]);
 
   const getWeatherIcon = (condition: string, size: string = 'w-8 h-8') => {
     const iconClass = size;
