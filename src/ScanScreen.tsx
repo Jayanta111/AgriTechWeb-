@@ -10,7 +10,12 @@ interface DetectionResult {
     confidence: number;
     bbox: number[];
   }[];
-  precautions?: any;
+  primary_disease?: string;
+  confidence?: number;
+  timestamp?: string;
+  live_mode?: boolean;
+  processing_time?: string;
+  error?: string;
 }
 
 interface FertilizerRecommendation {
@@ -175,23 +180,17 @@ function ScanScreen() {
 
       try {
         const res = await axios.post<DetectionResult>(
-          'http://localhost:5000/predict-live',
+          'http://localhost:8000/predict-live',
           formData
         );
 
-        const disease = res.data?.detections?.[0]?.class;
+        const disease = res.data?.primary_disease || res.data?.detections?.[0]?.class;
 
         if (disease && disease !== lastDiseaseRef.current) {
           lastDiseaseRef.current = disease;
 
           setDetectedCrop(disease);
-
-          if (res.data.precautions) {
-            setPrecautions(res.data.precautions);
-            setShowPrecautions(true);
-          } else {
-            await fetchPrecautions(disease);
-          }
+          await fetchPrecautions(disease);
 
           window.scrollTo({
             top: document.body.scrollHeight,
@@ -247,20 +246,14 @@ function ScanScreen() {
 
       try {
         const res = await axios.post<DetectionResult>(
-          'http://localhost:5000/predict',
+          'http://localhost:8000/predict',
           formData
         );
 
-        const disease = res.data?.detections?.[0]?.class;
+        const disease = res.data?.primary_disease || res.data?.detections?.[0]?.class;
 
         setDetectedCrop(disease || 'Healthy Crop');
-
-        if (res.data.precautions) {
-          setPrecautions(res.data.precautions);
-          setShowPrecautions(true);
-        } else {
-          await fetchPrecautions(disease || 'Healthy Crop');
-        }
+        await fetchPrecautions(disease || 'Healthy Crop');
       } catch {
         setError('Backend error');
       } finally {
@@ -294,20 +287,14 @@ function ScanScreen() {
 
     try {
       const res = await axios.post<DetectionResult>(
-        'http://localhost:5000/predict',
+        'http://localhost:8000/predict',
         formData
       );
 
-      const disease = res.data?.detections?.[0]?.class;
+      const disease = res.data?.primary_disease || res.data?.detections?.[0]?.class;
 
       setDetectedCrop(disease || 'Healthy Crop');
-
-      if (res.data.precautions) {
-        setPrecautions(res.data.precautions);
-        setShowPrecautions(true);
-      } else {
-        await fetchPrecautions(disease || 'Healthy Crop');
-      }
+      await fetchPrecautions(disease || 'Healthy Crop');
     } catch {
       setError('Upload failed');
     } finally {
@@ -320,28 +307,28 @@ function ScanScreen() {
   const fetchPrecautions = async (diseaseName: string) => {
     try {
       const res = await axios.post(
-        'http://localhost:5000/precautions',
+        'http://localhost:8000/precautions',
         {
           disease_name: diseaseName,
-          user_id: userId
+          user_id: userId,
+          include_fertilizers: true
         }
       );
 
-      if (res.data?.data) {
+      if (res.data?.success && res.data?.data) {
         setPrecautions(res.data.data);
+        setShowPrecautions(true);
+
+        const recommendations =
+          res.data.data?.fertilizer_recommendations ||
+          getFertilizerRecommendations();
+
+        setFertilizerRecommendations(recommendations);
       } else {
-        setPrecautions(res.data);
+        throw new Error('Invalid response structure');
       }
-
-      setShowPrecautions(true);
-
-      const recommendations =
-        res.data?.data?.fertilizer_recommendations ||
-        getFertilizerRecommendations();
-
-      setFertilizerRecommendations(recommendations);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to fetch precautions:', err);
 
       setPrecautions({
         immediate_actions: [
@@ -404,79 +391,46 @@ function ScanScreen() {
         setUserLocation({ lat, lng });
 
         try {
-          // OVERPASS API with expanded search criteria
-          const query: string = `
-            [out:json][timeout:10];
-            (
-              node["shop"="agrarian"](around:15000,${lat},${lng});
-              node["shop"="garden_centre"](around:15000,${lat},${lng});
-              node["office"="agricultural"](around:15000,${lat},${lng});
-              node["shop"="hardware"]["name"~"agri|farm|seed"](around:15000,${lat},${lng});
-              way["shop"="agrarian"](around:15000,${lat},${lng});
-              way["shop"="garden_centre"](around:15000,${lat},${lng});
-            );
-            out center;
-          `;
-
-          const response: AxiosResponse<any> = await axios.get(
-            'https://overpass-api.de/api/interpreter',
+          // Use backend endpoint for nearby stores
+          const response = await axios.post(
+            'http://localhost:8000/nearby-stores',
             {
-              params: {
-                data: query
-              }
+              latitude: lat,
+              longitude: lng
             }
           );
 
-          let stores: NearbyStore[] = [];
-          
-          if (response.data.elements && response.data.elements.length > 0) {
-            stores = response.data.elements
-              .filter((item: any) => item.lat && item.lon)
-              .map((item: any, index: number) => {
-                const storeLat: number = item.center?.lat || item.lat;
-                const storeLng: number = item.center?.lon || item.lon;
+          if (response.data?.success && response.data?.stores) {
+            const stores: NearbyStore[] = response.data.stores.map((store: any, index: number) => ({
+              id: store.id || `store_${index}`,
+              name: store.name || 'Agricultural Store',
+              address: store.address || 'Near your location',
+              distance: store.distance || 'Unknown',
+              phone: store.phone || 'Contact for details',
+              rating: store.rating || 0,
+              opening_hours: store.opening_hours || 'Hours not available',
+              coordinates: {
+                lat: store.coordinates?.lat || 0,
+                lng: store.coordinates?.lng || 0
+              },
+              products: store.products || ['Fertilizers', 'Seeds', 'Pesticides']
+            }));
 
-                // Distance calculation
-                const distanceKm: string = (
-                  Math.sqrt(
-                    Math.pow(storeLat - lat, 2) +
-                      Math.pow(storeLng - lng, 2)
-                  ) * 111
-                ).toFixed(1);
+            if (stores.length === 0) {
+              setError('No nearby agri stores found');
+              setLoadingStores(false);
+              return;
+            }
 
-                return {
-                  id: item.id?.toString() || `store_${index}`,
-                  name: item.tags?.name || 'Agricultural Store',
-                  address: item.tags?.address || 'Near your location',
-                  distance: `${distanceKm} km`,
-                  phone: item.tags?.phone || 'Contact for details',
-                  rating: Number((3.5 + Math.random() * 1.5).toFixed(1)),
-                  opening_hours: item.tags?.opening_hours || '8:00 AM - 8:00 PM',
-                  coordinates: {
-                    lat: storeLat,
-                    lng: storeLng
-                  },
-                  products: ['Fertilizers', 'Seeds', 'Pesticides']
-                };
-              })
-              .sort((a: NearbyStore, b: NearbyStore) => 
-                parseFloat(a.distance) - parseFloat(b.distance)
-              )
-              .slice(0, 10);
+            setNearbyStores(stores);
+            setShowStores(true);
+          } else {
+            setError('Unable to load nearby stores');
           }
-
-          if (stores.length === 0) {
-            setError('No nearby agri stores found');
-            setLoadingStores(false);
-            return;
-          }
-
-          setNearbyStores(stores);
-          setShowStores(true);
-          setLoadingStores(false);
         } catch (err: any) {
-          console.error('Overpass API error:', err);
-          setError('Unable to load nearby stores');
+          console.error('Backend API error:', err);
+          setError('Unable to load nearby stores. Make sure backend server is running.');
+        } finally {
           setLoadingStores(false);
         }
       },
@@ -825,15 +779,95 @@ function ScanScreen() {
               </div>
             )}
 
+            {precautions.short_term_management
+              ?.length > 0 && (
+              <div className="mb-4">
+                <h3 className="font-semibold text-orange-600 mb-2">
+                  Short-term Management
+                </h3>
+
+                <ul className="list-disc pl-5 space-y-1">
+                  {precautions.short_term_management.map(
+                    (
+                      item: string,
+                      index: number
+                    ) => (
+                      <li key={index}>{item}</li>
+                    )
+                  )}
+                </ul>
+              </div>
+            )}
+
             {precautions.long_term_prevention
               ?.length > 0 && (
-              <div>
+              <div className="mb-4">
                 <h3 className="font-semibold text-green-600 mb-2">
-                  Prevention
+                  Long-term Prevention
                 </h3>
 
                 <ul className="list-disc pl-5 space-y-1">
                   {precautions.long_term_prevention.map(
+                    (
+                      item: string,
+                      index: number
+                    ) => (
+                      <li key={index}>{item}</li>
+                    )
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {precautions.organic_alternatives
+              ?.length > 0 && (
+              <div className="mb-4">
+                <h3 className="font-semibold text-emerald-600 mb-2">
+                  Organic Alternatives
+                </h3>
+
+                <ul className="list-disc pl-5 space-y-1">
+                  {precautions.organic_alternatives.map(
+                    (
+                      item: string,
+                      index: number
+                    ) => (
+                      <li key={index}>{item}</li>
+                    )
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {precautions.safety_precautions
+              ?.length > 0 && (
+              <div className="mb-4">
+                <h3 className="font-semibold text-yellow-600 mb-2">
+                  Safety Precautions
+                </h3>
+
+                <ul className="list-disc pl-5 space-y-1">
+                  {precautions.safety_precautions.map(
+                    (
+                      item: string,
+                      index: number
+                    ) => (
+                      <li key={index}>{item}</li>
+                    )
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {precautions.yield_impact
+              ?.length > 0 && (
+              <div className="mb-4">
+                <h3 className="font-semibold text-purple-600 mb-2">
+                  Yield Impact
+                </h3>
+
+                <ul className="list-disc pl-5 space-y-1">
+                  {precautions.yield_impact.map(
                     (
                       item: string,
                       index: number

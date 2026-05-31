@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, Search, Heart, Eye, Package, User, MapPin, Calendar, TrendingUp, RefreshCw, AlertCircle, TrendingDown, Minus, Lock, LogIn, UserPlus } from 'lucide-react';
+import { Plus, Search, Heart, Eye, Package, User, MapPin, Calendar, TrendingUp, RefreshCw, AlertCircle, TrendingDown, Minus, Lock, LogIn, UserPlus, LogOut } from 'lucide-react';
 import marketplaceService, { Listing, Transaction, MarketplaceStats } from './services/marketplaceService.tsx';
 import marketPriceService from './services/marketPriceService.tsx';
 import CreateListingModal from './components/CreateListingModal.tsx';
@@ -23,11 +23,13 @@ const MarketplaceScreen: React.FC = () => {
   const [priceRange, setPriceRange] = useState({ min: '', max: '' });
   const [sortBy, setSortBy] = useState<'price' | 'date'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [nearbyOnly, setNearbyOnly] = useState(false);
 
   // Authentication context
   const { 
     user: currentUser, 
-    isAuthenticated
+    isAuthenticated,
+    signOut
   } = useAuthContext();
 
   const loadMarketplaceData = useCallback(async () => {
@@ -181,6 +183,16 @@ const MarketplaceScreen: React.FC = () => {
   const getFilteredAndSortedListings = () => {
     let filtered = listings;
 
+    // Apply "My Listings" filter
+    if (activeTab === 'my-listings' && currentUser) {
+      filtered = filtered.filter(listing => listing.seller_id === currentUser.user_id);
+    }
+
+    // Apply Nearby Filter
+    if (nearbyOnly) {
+      filtered = filtered.filter(listing => listing.distance_km !== undefined && listing.distance_km <= 20);
+    }
+
     // Apply search
     if (searchTerm) {
       filtered = marketplaceService.searchListings(filtered, searchTerm);
@@ -262,13 +274,23 @@ const MarketplaceScreen: React.FC = () => {
               </Link>
             </div>
           ) : (
-            <button
-              onClick={() => setShowCreateListing(true)}
-              className="bg-green-500 text-white px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-600 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="text-sm">Create Listing</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowCreateListing(true)}
+                className="bg-green-500 text-white px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-600 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-sm hidden sm:inline">Create Listing</span>
+              </button>
+              <button
+                onClick={signOut}
+                className="bg-red-50 text-red-600 px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-red-100 transition-colors border border-red-200"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="text-sm hidden sm:inline">Sign Out</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -351,8 +373,8 @@ const MarketplaceScreen: React.FC = () => {
         </button>
       </div>
 
-      {/* Browse Tab */}
-      {activeTab === 'browse' && (
+      {/* Browse & My Listings Tabs */}
+      {(activeTab === 'browse' || activeTab === 'my-listings') && (
         <div>
           {/* Search and Filters */}
           <div className="bg-white rounded-xl p-3 sm:p-4 mb-4 shadow-md">
@@ -428,6 +450,16 @@ const MarketplaceScreen: React.FC = () => {
                   <option value="price-asc">Price: Low to High</option>
                   <option value="price-desc">Price: High to Low</option>
                 </select>
+
+                <label className="flex items-center space-x-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={nearbyOnly}
+                    onChange={(e) => setNearbyOnly(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Nearby (&lt; 20km)</span>
+                </label>
               </div>
             </div>
           </div>
@@ -476,7 +508,7 @@ const MarketplaceScreen: React.FC = () => {
                     </div>
                     <div className="flex items-center space-x-1">
                       <MapPin className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span>{listing.location}</span>
+                      <span>{listing.location} {listing.distance_km ? `(${listing.distance_km}km away)` : ''}</span>
                     </div>
                     <div className="flex items-center space-x-1">
                       <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -514,6 +546,10 @@ const MarketplaceScreen: React.FC = () => {
                         <Lock className="w-3 h-3" />
                         <span>Sign In</span>
                       </Link>
+                      ) : currentUser?.user_id === listing.seller_id ? (
+                        <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs sm:text-sm rounded-lg flex items-center">
+                          Your Listing
+                        </span>
                       ) : (
                         <button
                           onClick={() => handleBuy(listing.listing_id, 1)}

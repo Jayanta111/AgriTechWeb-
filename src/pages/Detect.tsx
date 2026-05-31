@@ -11,6 +11,18 @@ interface DetectionResult {
   }>;
 }
 
+interface PrecautionsData {
+  disease_name: string;
+  immediate_actions: string[];
+  short_term_management: string[];
+  long_term_prevention: string[];
+  organic_alternatives: string[];
+  safety_precautions: string[];
+  yield_impact: string[];
+  fertilizer_recommendations?: any[];
+  ai_generated?: boolean;
+}
+
 export const Detect = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string>('');
@@ -45,7 +57,7 @@ export const Detect = () => {
       formData.append('file', selectedFile);
 
       const response = await axios.post<DetectionResult>(
-        'http://localhost:5000/predict',
+        'http://localhost:8001/predict',
         formData,
         {
           headers: {
@@ -57,10 +69,32 @@ export const Detect = () => {
       // Store results in sessionStorage for the results page
       sessionStorage.setItem('detectionResults', JSON.stringify(response.data));
       sessionStorage.setItem('imagePreview', preview);
+
+      // Fetch precautions using RAG/LLaMA
+      const diseaseName = response.data?.detections?.[0]?.class || 'Healthy Crop';
+      const userId = 'user_' + Math.random().toString(36).substring(2, 9);
+      
+      try {
+        const precautionsResponse = await axios.post(
+          'http://localhost:8000/precautions',
+          {
+            disease_name: diseaseName,
+            user_id: userId,
+            include_fertilizers: true
+          }
+        );
+        
+        if (precautionsResponse.data?.data) {
+          sessionStorage.setItem('precautionsData', JSON.stringify(precautionsResponse.data.data));
+        }
+      } catch (precautionsErr) {
+        console.error('Failed to fetch precautions:', precautionsErr);
+        // Continue without precautions - not a critical error
+      }
       
       navigate('/results');
     } catch (err) {
-      setError('Failed to analyze image. Please make sure the backend server is running on localhost:5000');
+      setError('Failed to analyze image. Please make sure the backend server is running on localhost:8001');
       console.error('Upload error:', err);
     } finally {
       setIsUploading(false);

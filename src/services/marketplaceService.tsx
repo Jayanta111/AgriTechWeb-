@@ -1,7 +1,3 @@
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:5001/api';
-
 export interface User {
   user_id: string;
   name: string;
@@ -22,6 +18,7 @@ export interface Listing {
   price_per_unit: number;
   unit: string;
   location: string;
+  distance_km?: number; // Added to simulate physical distance
   description: string;
   images: string[];
   status: 'active' | 'sold' | 'expired';
@@ -55,74 +52,101 @@ export interface MarketplaceStats {
   popular_commodities: [string, number][];
 }
 
-class MarketplaceService {
-  private api = axios.create({
-    baseURL: API_BASE_URL,
-    timeout: 10000,
-  });
+// Mock data to initialize if local storage is empty
+const defaultListings: Listing[] = [
+  {
+    listing_id: '1',
+    seller_id: 'user1',
+    seller_name: 'Ramesh Singh',
+    commodity: 'Wheat',
+    quantity: 500,
+    price_per_unit: 22,
+    unit: 'kg',
+    location: 'Delhi',
+    distance_km: 12, // Nearby
+    description: 'High quality Sharbati wheat, freshly harvested.',
+    images: [],
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    expires_at: new Date(Date.now() + 86400000 * 30).toISOString(),
+    views: 145,
+    likes: 12
+  },
+  {
+    listing_id: '2',
+    seller_id: 'user2',
+    seller_name: 'Suresh Patil',
+    commodity: 'Tomato',
+    quantity: 100,
+    price_per_unit: 35,
+    unit: 'kg',
+    location: 'Maharashtra',
+    distance_km: 45, // Not nearby
+    description: 'Fresh organic tomatoes from farm.',
+    images: [],
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+    expires_at: new Date(Date.now() + 86400000 * 7).toISOString(),
+    views: 89,
+    likes: 5
+  }
+];
 
+class MarketplaceService {
   constructor() {
-    // Add request interceptor to include auth token
-    this.api.interceptors.request.use(async (config) => {
-      try {
-        // Get the auth token from Clerk
-        const auth = await this.getAuthToken();
-        if (auth) {
-          config.headers.Authorization = `Bearer ${auth}`;
-        }
-      } catch (error) {
-        console.warn('Failed to get auth token:', error);
-      }
-      return config;
-    });
+    this.initStorage();
   }
 
-  private async getAuthToken(): Promise<string | null> {
-    // This will be called from a React component context
-    // For now, return null and we'll handle auth in the components
-    return null;
+  private initStorage() {
+    if (!localStorage.getItem('marketplace_listings')) {
+      localStorage.setItem('marketplace_listings', JSON.stringify(defaultListings));
+    }
+    if (!localStorage.getItem('marketplace_transactions')) {
+      localStorage.setItem('marketplace_transactions', JSON.stringify([]));
+    }
+  }
+
+  private getStoredListings(): Listing[] {
+    const data = localStorage.getItem('marketplace_listings');
+    return data ? JSON.parse(data) : [];
+  }
+
+  private saveListings(listings: Listing[]) {
+    localStorage.setItem('marketplace_listings', JSON.stringify(listings));
+  }
+
+  private getStoredTransactions(): Transaction[] {
+    const data = localStorage.getItem('marketplace_transactions');
+    return data ? JSON.parse(data) : [];
+  }
+
+  private saveTransactions(transactions: Transaction[]) {
+    localStorage.setItem('marketplace_transactions', JSON.stringify(transactions));
   }
 
   // Method to set auth token from component
   setAuthToken(token: string) {
-    this.api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    // Mock implementation
   }
 
   // Method to clear auth token
   clearAuthToken() {
-    delete this.api.defaults.headers.common['Authorization'];
+    // Mock implementation
   }
 
   // User Management
-  async createUser(userData: {
-    name: string;
-    email: string;
-    phone: string;
-    location: string;
-    user_type?: 'farmer' | 'buyer';
-  }): Promise<{ message: string; user_id: string }> {
-    try {
-      const response = await this.api.post('/users', userData);
-      return response.data;
-    } catch (error) {
-      console.error('Error creating user:', error);
-      throw new Error('Failed to create user');
-    }
+  async createUser(userData: any): Promise<{ message: string; user_id: string }> {
+    return { message: 'User created', user_id: 'user_' + Date.now() };
   }
 
   async getUsers(): Promise<User[]> {
-    try {
-      const response = await this.api.get('/users');
-      return response.data.users;
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      throw new Error('Failed to fetch users');
-    }
+    return [];
   }
 
   // Listing Management
   async createListing(listingData: {
     seller_id: string;
+    seller_name?: string;
     commodity: string;
     quantity: number;
     price_per_unit: number;
@@ -131,13 +155,42 @@ class MarketplaceService {
     description?: string;
     images?: string[];
   }): Promise<{ message: string; listing_id: string }> {
-    try {
-      const response = await this.api.post('/listings', listingData);
-      return response.data;
-    } catch (error) {
-      console.error('Error creating listing:', error);
-      throw new Error('Failed to create listing');
+    const listings = this.getStoredListings();
+    
+    // Auto-fetch seller name if not provided (mocking)
+    const storedAuth = localStorage.getItem('auth_state');
+    let sellerName = listingData.seller_name || 'Anonymous Farmer';
+    if (storedAuth) {
+      try {
+        const auth = JSON.parse(storedAuth);
+        if (auth.user && auth.user.name) {
+          sellerName = auth.user.name;
+        }
+      } catch (e) {}
     }
+
+    const newListing: Listing = {
+      listing_id: 'listing_' + Date.now(),
+      seller_id: listingData.seller_id,
+      seller_name: sellerName,
+      commodity: listingData.commodity,
+      quantity: listingData.quantity,
+      price_per_unit: listingData.price_per_unit,
+      unit: listingData.unit || 'kg',
+      location: listingData.location,
+      distance_km: Math.floor(Math.random() * 50) + 1, // Random distance between 1 and 50 km
+      description: listingData.description || '',
+      images: listingData.images || [],
+      status: 'active',
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 86400000 * 30).toISOString(),
+      views: 0,
+      likes: 0
+    };
+
+    listings.push(newListing);
+    this.saveListings(listings);
+    return { message: 'Listing created successfully', listing_id: newListing.listing_id };
   }
 
   async getListings(filters?: {
@@ -147,50 +200,54 @@ class MarketplaceService {
     max_price?: number;
     status?: string;
   }): Promise<Listing[]> {
-    try {
-      const params = new URLSearchParams();
-      if (filters?.commodity) params.append('commodity', filters.commodity);
-      if (filters?.location) params.append('location', filters.location);
-      if (filters?.min_price) params.append('min_price', filters.min_price.toString());
-      if (filters?.max_price) params.append('max_price', filters.max_price.toString());
-      if (filters?.status) params.append('status', filters.status);
+    let listings = this.getStoredListings();
 
-      const response = await this.api.get(`/listings?${params.toString()}`);
-      return response.data.listings;
-    } catch (error) {
-      console.error('Error fetching listings:', error);
-      throw new Error('Failed to fetch listings');
+    if (filters) {
+      if (filters.commodity) {
+        listings = listings.filter(l => l.commodity.toLowerCase() === filters.commodity!.toLowerCase());
+      }
+      if (filters.location) {
+        listings = listings.filter(l => l.location.toLowerCase() === filters.location!.toLowerCase());
+      }
+      if (filters.min_price !== undefined) {
+        listings = listings.filter(l => l.price_per_unit >= filters.min_price!);
+      }
+      if (filters.max_price !== undefined) {
+        listings = listings.filter(l => l.price_per_unit <= filters.max_price!);
+      }
+      if (filters.status) {
+        listings = listings.filter(l => l.status === filters.status);
+      }
     }
+
+    return listings;
   }
 
   async getListing(listingId: string): Promise<Listing> {
-    try {
-      const response = await this.api.get(`/listings/${listingId}`);
-      return response.data.listing;
-    } catch (error) {
-      console.error('Error fetching listing:', error);
-      throw new Error('Failed to fetch listing');
-    }
+    const listings = this.getStoredListings();
+    const listing = listings.find(l => l.listing_id === listingId);
+    if (!listing) throw new Error('Listing not found');
+    return listing;
   }
 
   async updateListing(listingId: string, updateData: Partial<Listing>): Promise<{ message: string }> {
-    try {
-      const response = await this.api.put(`/listings/${listingId}`, updateData);
-      return response.data;
-    } catch (error) {
-      console.error('Error updating listing:', error);
-      throw new Error('Failed to update listing');
-    }
+    const listings = this.getStoredListings();
+    const index = listings.findIndex(l => l.listing_id === listingId);
+    if (index === -1) throw new Error('Listing not found');
+    
+    listings[index] = { ...listings[index], ...updateData };
+    this.saveListings(listings);
+    return { message: 'Listing updated successfully' };
   }
 
   async likeListing(listingId: string): Promise<{ message: string; likes: number }> {
-    try {
-      const response = await this.api.post(`/listings/${listingId}/like`);
-      return response.data;
-    } catch (error) {
-      console.error('Error liking listing:', error);
-      throw new Error('Failed to like listing');
-    }
+    const listings = this.getStoredListings();
+    const index = listings.findIndex(l => l.listing_id === listingId);
+    if (index === -1) throw new Error('Listing not found');
+    
+    listings[index].likes += 1;
+    this.saveListings(listings);
+    return { message: 'Listing liked', likes: listings[index].likes };
   }
 
   // Transaction Management
@@ -199,65 +256,80 @@ class MarketplaceService {
     buyer_id: string;
     quantity: number;
   }): Promise<{ message: string; transaction_id: string }> {
-    try {
-      const response = await this.api.post('/transactions', transactionData);
-      return response.data;
-    } catch (error) {
-      console.error('Error creating transaction:', error);
-      throw new Error('Failed to create transaction');
-    }
+    const listings = this.getStoredListings();
+    const listing = listings.find(l => l.listing_id === transactionData.listing_id);
+    if (!listing) throw new Error('Listing not found');
+
+    const transactions = this.getStoredTransactions();
+    const newTransaction: Transaction = {
+      transaction_id: 'txn_' + Date.now(),
+      listing_id: transactionData.listing_id,
+      buyer_id: transactionData.buyer_id,
+      seller_id: listing.seller_id,
+      quantity: transactionData.quantity,
+      total_price: transactionData.quantity * listing.price_per_unit,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      listing: listing
+    };
+
+    transactions.push(newTransaction);
+    this.saveTransactions(transactions);
+    return { message: 'Transaction created', transaction_id: newTransaction.transaction_id };
   }
 
   async getTransactions(userId?: string): Promise<Transaction[]> {
-    try {
-      const params = userId ? `?user_id=${userId}` : '';
-      const response = await this.api.get(`/transactions${params}`);
-      return response.data.transactions;
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      throw new Error('Failed to fetch transactions');
+    let transactions = this.getStoredTransactions();
+    if (userId) {
+      transactions = transactions.filter(t => t.buyer_id === userId || t.seller_id === userId);
     }
+    return transactions;
   }
 
   async confirmTransaction(transactionId: string): Promise<{ message: string }> {
-    try {
-      const response = await this.api.post(`/transactions/${transactionId}/confirm`);
-      return response.data;
-    } catch (error) {
-      console.error('Error confirming transaction:', error);
-      throw new Error('Failed to confirm transaction');
+    const txns = this.getStoredTransactions();
+    const index = txns.findIndex(t => t.transaction_id === transactionId);
+    if (index > -1) {
+      txns[index].status = 'confirmed';
+      txns[index].confirmed_at = new Date().toISOString();
+      this.saveTransactions(txns);
     }
+    return { message: 'Transaction confirmed' };
   }
 
   async completeTransaction(transactionId: string): Promise<{ message: string }> {
-    try {
-      const response = await this.api.post(`/transactions/${transactionId}/complete`);
-      return response.data;
-    } catch (error) {
-      console.error('Error completing transaction:', error);
-      throw new Error('Failed to complete transaction');
+    const txns = this.getStoredTransactions();
+    const index = txns.findIndex(t => t.transaction_id === transactionId);
+    if (index > -1) {
+      txns[index].status = 'completed';
+      txns[index].completed_at = new Date().toISOString();
+      this.saveTransactions(txns);
     }
+    return { message: 'Transaction completed' };
   }
 
   async cancelTransaction(transactionId: string): Promise<{ message: string }> {
-    try {
-      const response = await this.api.post(`/transactions/${transactionId}/cancel`);
-      return response.data;
-    } catch (error) {
-      console.error('Error cancelling transaction:', error);
-      throw new Error('Failed to cancel transaction');
+    const txns = this.getStoredTransactions();
+    const index = txns.findIndex(t => t.transaction_id === transactionId);
+    if (index > -1) {
+      txns[index].status = 'cancelled';
+      this.saveTransactions(txns);
     }
+    return { message: 'Transaction cancelled' };
   }
 
   // Marketplace Statistics
   async getMarketplaceStats(): Promise<MarketplaceStats> {
-    try {
-      const response = await this.api.get('/marketplace/stats');
-      return response.data.stats;
-    } catch (error) {
-      console.error('Error fetching marketplace stats:', error);
-      throw new Error('Failed to fetch marketplace stats');
-    }
+    const listings = this.getStoredListings();
+    const txns = this.getStoredTransactions();
+
+    return {
+      active_listings: listings.filter(l => l.status === 'active').length,
+      sold_listings: listings.filter(l => l.status === 'sold').length,
+      pending_transactions: txns.filter(t => t.status === 'pending').length,
+      completed_transactions: txns.filter(t => t.status === 'completed').length,
+      popular_commodities: [['Wheat', 2], ['Tomato', 1]]
+    };
   }
 
   // Utility Functions
@@ -292,57 +364,44 @@ class MarketplaceService {
   getStatusColor(status: string): string {
     switch (status) {
       case 'active':
-        return 'text-green-600';
+        return 'text-green-600 bg-green-50 border border-green-200';
       case 'sold':
-        return 'text-red-600';
+        return 'text-red-600 bg-red-50 border border-red-200';
       case 'expired':
-        return 'text-gray-600';
+        return 'text-gray-600 bg-gray-50 border border-gray-200';
       case 'pending':
-        return 'text-yellow-600';
+        return 'text-yellow-600 bg-yellow-50 border border-yellow-200';
       case 'confirmed':
-        return 'text-blue-600';
+        return 'text-blue-600 bg-blue-50 border border-blue-200';
       case 'completed':
-        return 'text-green-600';
+        return 'text-green-600 bg-green-50 border border-green-200';
       case 'cancelled':
-        return 'text-red-600';
+        return 'text-red-600 bg-red-50 border border-red-200';
       default:
-        return 'text-gray-600';
+        return 'text-gray-600 bg-gray-50 border border-gray-200';
     }
   }
 
   getStatusText(status: string): string {
     switch (status) {
-      case 'active':
-        return 'Active';
-      case 'sold':
-        return 'Sold';
-      case 'expired':
-        return 'Expired';
-      case 'pending':
-        return 'Pending';
-      case 'confirmed':
-        return 'Confirmed';
-      case 'completed':
-        return 'Completed';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return status;
+      case 'active': return 'Active';
+      case 'sold': return 'Sold';
+      case 'expired': return 'Expired';
+      case 'pending': return 'Pending';
+      case 'confirmed': return 'Confirmed';
+      case 'completed': return 'Completed';
+      case 'cancelled': return 'Cancelled';
+      default: return status;
     }
   }
 
   getTransactionStatusMessage(status: string): string {
     switch (status) {
-      case 'pending':
-        return 'Waiting for seller confirmation';
-      case 'confirmed':
-        return 'Seller confirmed. Waiting for delivery';
-      case 'completed':
-        return 'Transaction completed successfully';
-      case 'cancelled':
-        return 'Transaction was cancelled';
-      default:
-        return 'Unknown status';
+      case 'pending': return 'Waiting for seller confirmation';
+      case 'confirmed': return 'Seller confirmed. Waiting for delivery';
+      case 'completed': return 'Transaction completed successfully';
+      case 'cancelled': return 'Transaction was cancelled';
+      default: return 'Unknown status';
     }
   }
 
@@ -354,7 +413,7 @@ class MarketplaceService {
     return listings.filter(listing =>
       listing.commodity.toLowerCase().includes(lowerSearchTerm) ||
       listing.location.toLowerCase().includes(lowerSearchTerm) ||
-      listing.description.toLowerCase().includes(lowerSearchTerm)
+      (listing.description && listing.description.toLowerCase().includes(lowerSearchTerm))
     );
   }
 
